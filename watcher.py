@@ -6,12 +6,9 @@ from datetime import datetime
 # ======================
 # 🔑 НАСТРОЙКИ
 # ======================
-YANDEX_DISK_TOKEN = "y0__xCdoeLYBRjblgMgtZWKihWiDf1au7jJtVsy4bQO-a5A7-NMJA"
+YANDEX_DISK_TOKEN = os.getenv("YANDEX_DISK_TOKEN")  # ← берётся из env
 YANDEX_DISK_REMOTE_PATH = "/parcer_data"
-
-# Для тестов на ПК: задайте здесь свою тему ntfy (необязательно, если используете env)
-NTFY_TOPIC_FALLBACK = None  # например: "mypricewatch_abc123"
-# ======================
+NTFY_TOPIC_FALLBACK = None  # не нужен — берём из env
 
 HEADERS = {"Authorization": f"OAuth {YANDEX_DISK_TOKEN}"}
 BASE_URL = "https://cloud-api.yandex.net/v1/disk/resources"
@@ -223,4 +220,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
