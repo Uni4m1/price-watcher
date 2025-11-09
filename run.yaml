@@ -1,7 +1,7 @@
 name: Price Watcher
 on:
   schedule:
-    - cron: '0 8 * * *'  # каждый день в 8:00 UTC (~11:00 МСК)
+    - cron: '25 1 * * *'  # каждый день в 8:00 UTC (~11:00 МСК)
   workflow_dispatch:     # можно запустить вручную
 
 jobs:
