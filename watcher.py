@@ -1,12 +1,16 @@
 import re
 import requests
+import os
 from datetime import datetime
 
 # ======================
 # 🔑 НАСТРОЙКИ
 # ======================
-YANDEX_DISK_TOKEN = "y0__xCdoeLYBRjblgMgtZWKihWiDf1au7jJtVsy4bQO-a5A7-NMJA"  # ← ЗАМЕНИТЕ на ваш токен!
-YANDEX_DISK_REMOTE_PATH = "/parcer_data"     # путь к папке на Диске
+YANDEX_DISK_TOKEN = "y0__xCdoeLYBRjblgMgtZWKihWiDf1au7jJtVsy4bQO-a5A7-NMJA"
+YANDEX_DISK_REMOTE_PATH = "/parcer_data"
+
+# Для тестов на ПК: задайте здесь свою тему ntfy (необязательно, если используете env)
+NTFY_TOPIC_FALLBACK = None  # например: "mypricewatch_abc123"
 # ======================
 
 HEADERS = {"Authorization": f"OAuth {YANDEX_DISK_TOKEN}"}
@@ -49,7 +53,6 @@ def parse_products(text: str):
 
 
 def get_download_url(file_path: str) -> str:
-    """Получает временную прямую ссылку для скачивания файла с Яндекс.Диска."""
     url = "https://cloud-api.yandex.net/v1/disk/resources/download"
     params = {"path": file_path}
     resp = requests.get(url, headers=HEADERS, params=params, timeout=10)
@@ -79,7 +82,6 @@ def format_price(n: int) -> str:
 def main():
     print("🔍 Получение списка файлов из папки '/parcer_data' на Яндекс.Диске...")
     
-    # 1. Получаем список файлов в папке
     params = {
         "path": YANDEX_DISK_REMOTE_PATH,
         "limit": 100,
@@ -103,7 +105,6 @@ def main():
     data = resp.json()
     items = data.get("_embedded", {}).get("items", [])
     
-    # 2. Фильтруем .txt файлы
     txt_files = []
     for item in items:
         name = item.get("name", "")
@@ -117,7 +118,6 @@ def main():
 
     print(f"📁 Найдено {len(txt_files)} .txt файлов. Анализ имён...")
     
-    # 3. Парсим даты
     dated_files = []
     for name, path in txt_files:
         dt = parse_timestamp_from_filename(name)
@@ -137,7 +137,6 @@ def main():
     print(f"  🆕 {latest_name}  ({latest_dt.strftime('%d.%m.%Y %H:%M:%S')})")
     print(f"  📅 {prev_name}  ({prev_dt.strftime('%d.%m.%Y %H:%M:%S')})\n")
 
-    # 4. Получаем ссылки и скачиваем
     try:
         print("📥 Получение ссылок на скачивание...")
         latest_url = get_download_url(latest_path)
@@ -150,7 +149,6 @@ def main():
         print(f"❌ Ошибка: {e}")
         return
 
-    # 5. Парсинг и сравнение
     products_new = parse_products(text_new)
     products_old = parse_products(text_old)
 
@@ -182,7 +180,7 @@ def main():
                 f"   {format_price(old['price'])} → {format_price(new['price'])} ({change_desc})"
             )
 
-    # 6. Вывод
+    # 6. Вывод и отправка уведомления
     if changes:
         print("🔔 Изменения:\n")
         for ch in changes:
@@ -192,6 +190,35 @@ def main():
         print("✅ Изменений не обнаружено.")
 
     print(f"ℹ️ Всего изменений: {len(changes)}")
+
+    # ✅ Отправка уведомления в ntfy.sh (если есть изменения)
+    if changes:
+        try:
+            topic = os.getenv("NTFY_TOPIC") or NTFY_TOPIC_FALLBACK
+            if not topic:
+                print("ℹ️ NTFY_TOPIC не задан — уведомление не отправлено.")
+            else:
+                message = "🔔 Изменения в прайсе:\n\n" + "\n".join(changes)
+                if len(message) > 4000:
+                    message = message[:4000] + "...\n\n(полный лог — в логах)"
+                
+                # 🔥 КРИТИЧЕСКИ ВАЖНО: убран пробел в URL!
+                response = requests.post(
+                    f"https://ntfy.sh/{topic}",  # ← без пробела!
+                    data=message.encode("utf-8"),
+                    headers={
+                        "Title": "🆕 Изменения в прайсе!",
+                        "Priority": "high",
+                        "Tags": "chart_with_upwards_trend,moneybag"
+                    },
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    print("✅ Уведомление успешно отправлено в ntfy.sh")
+                else:
+                    print(f"⚠️ ntfy.sh вернул ошибку: {response.status_code} {response.text}")
+        except Exception as e:
+            print(f"⚠️ Ошибка при отправке в ntfy.sh: {e}")
 
 
 if __name__ == "__main__":
