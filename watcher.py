@@ -194,7 +194,7 @@ def main():
     # ✅ Отправка уведомления в ntfy.sh (если есть изменения)
     if changes:
         try:
-            topic = os.getenv("NTFY_TOPIC") or NTFY_TOPIC_FALLBACK
+            topic = os.getenv("parcing") or NTFY_TOPIC_FALLBACK
             if not topic:
                 print("ℹ️ NTFY_TOPIC не задан — уведомление не отправлено.")
             else:
@@ -223,3 +223,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
