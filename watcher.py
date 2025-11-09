@@ -182,18 +182,19 @@ def main():
             # - приоритет high — всплывает даже при Do Not Disturb
             # - кнопка "Посмотреть" → открывает ntfy в браузере
             response = requests.post(
-                f"https://ntfy.sh/{topic}",  # ← без пробелов!
-                data=message.encode("utf-8"),
-                headers={
-                    "Title": "🆕 Изменения в прайсе!",
-                    "Priority": "high",
-                    "Tags": "chart_with_upwards_trend,money_with_wings",
-                    "Click": f"https://ntfy.sh/{topic}",  # открыть в браузере
-                    "Actions": '[{"action":"view","label":"Открыть","url":"https://ntfy.sh/' + topic + '"}]',
-                    "Urgent": "true"  # для iOS — force alert
-                },
-                timeout=10
-            )
+response = requests.post(
+    f"https://ntfy.sh/{topic}",  # ← без пробелов!
+    data=message.encode("utf-8"),
+    headers={
+        "Title": "🆕 Изменения в прайсе!",
+        "Priority": "high",
+        "Tags": "chart_with_upwards_trend,money_with_wings",
+        "Click": f"https://ntfy.sh/{topic}",  # ← без пробелов!
+        "Actions": f'[{{"action":"view","label":"Открыть","url":"https://ntfy.sh/{topic}"}}]',
+        "Urgent": "true"
+    },
+    timeout=10
+)
             if response.status_code == 200:
                 print("✅ Push-уведомление отправлено (доступно на Android и iOS)")
             else:
@@ -204,3 +205,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
