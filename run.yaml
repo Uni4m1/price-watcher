@@ -2,7 +2,7 @@ name: Price Watcher
 
 on:
   schedule:
-    - cron: '47 1 * * *'  # 01:27 МСК
+    - cron: '0 2 * * *'  # 01:27 МСК (UTC+3 = 22:27 UTC)
   workflow_dispatch:
 
 jobs:
@@ -21,6 +21,6 @@ jobs:
 
       - name: Run price checker
         env:
-          YANDEX_DISK_TOKEN: ${{ secrets.YANDEX_TOKEN }}
-          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          YANDEX_DISK_TOKEN: "y0__xCdoeLYBRjblgMgtZWKihWiDf1au7jJtVsy4bQO-a5A7-NMJA"
+          NTFY_TOPIC: "parcing"
         run: python watcher.py
