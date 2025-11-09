@@ -2,8 +2,8 @@ name: Price Watcher
 
 on:
   schedule:
-    - cron: '40 1 * * *'  # 22:27 UTC = 01:27 МСК (UTC+3)
-  workflow_dispatch:       # можно запустить вручную из GitHub UI
+    - cron: '40 1 * * *'  # 01:27 МСК
+  workflow_dispatch:
 
 jobs:
   check-prices:
@@ -21,15 +21,6 @@ jobs:
 
       - name: Run price checker
         env:
-          NTFY_TOPIC: parcing
-        run: |
-          python -c "
-import os
-token = 'y0__xCdoeLYBRjblgMgtZWKihWiDf1au7jJtVsy4bQO-a5A7-NMJA'
-with open('watcher.py', 'r', encoding='utf-8') as f:
-    code = f.read()
-code = code.replace('YANDEX_DISK_TOKEN = \"YOUR_OAUTH_TOKEN_HERE\"', f'YANDEX_DISK_TOKEN = \"{token}\"')
-with open('watcher_fixed.py', 'w', encoding='utf-8') as f:
-    f.write(code)
-          "
-          python watcher_fixed.py
+          YANDEX_DISK_TOKEN: ${{ secrets.YANDEX_TOKEN }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python watcher.py
