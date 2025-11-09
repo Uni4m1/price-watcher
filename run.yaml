@@ -1,0 +1,25 @@
+name: Price Watcher
+on:
+  schedule:
+    - cron: '0 8 * * *'  # каждый день в 8:00 UTC (~11:00 МСК)
+  workflow_dispatch:     # можно запустить вручную
+
+jobs:
+  check-prices:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run price checker
+        env:
+          YANDEX_TOKEN: ${{ secrets.YANDEX_TOKEN }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python watcher.py
