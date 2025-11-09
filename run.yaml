@@ -2,7 +2,7 @@ name: Price Watcher
 
 on:
   schedule:
-    - cron: '40 1 * * *'  # 01:27 МСК
+    - cron: '47 1 * * *'  # 01:27 МСК
   workflow_dispatch:
 
 jobs:
