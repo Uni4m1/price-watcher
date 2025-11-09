@@ -6,12 +6,16 @@ from datetime import datetime
 # ======================
 # 🔑 НАСТРОЙКИ
 # ======================
-YANDEX_DISK_TOKEN = os.getenv("YANDEX_DISK_TOKEN")  # ← берётся из env
+YANDEX_DISK_TOKEN = os.getenv("YANDEX_DISK_TOKEN")
 YANDEX_DISK_REMOTE_PATH = "/parcer_data"
-NTFY_TOPIC_FALLBACK = None  # не нужен — берём из env
+
+if not YANDEX_DISK_TOKEN:
+    raise RuntimeError("❌ Переменная окружения YANDEX_DISK_TOKEN не задана!")
+
+BASE_URL = "https://cloud-api.yandex.net/v1/disk/resources"  # ← без пробелов!
+DOWNLOAD_URL_API = "https://cloud-api.yandex.net/v1/disk/resources/download"  # ← без пробелов!
 
 HEADERS = {"Authorization": f"OAuth {YANDEX_DISK_TOKEN}"}
-BASE_URL = "https://cloud-api.yandex.net/v1/disk/resources"
 
 
 def parse_timestamp_from_filename(name: str):
@@ -50,12 +54,10 @@ def parse_products(text: str):
 
 
 def get_download_url(file_path: str) -> str:
-    url = "https://cloud-api.yandex.net/v1/disk/resources/download"
     params = {"path": file_path}
-    resp = requests.get(url, headers=HEADERS, params=params, timeout=10)
+    resp = requests.get(DOWNLOAD_URL_API, headers=HEADERS, params=params, timeout=10)
     if resp.status_code == 200:
-        data = resp.json()
-        return data["href"]
+        return resp.json()["href"]
     else:
         raise RuntimeError(f"Не удалось получить ссылку для '{file_path}': {resp.status_code} {resp.text}")
 
@@ -78,12 +80,8 @@ def format_price(n: int) -> str:
 
 def main():
     print("🔍 Получение списка файлов из папки '/parcer_data' на Яндекс.Диске...")
-    
-    params = {
-        "path": YANDEX_DISK_REMOTE_PATH,
-        "limit": 100,
-        "fields": "items.name,items.path"
-    }
+
+    params = {"path": YANDEX_DISK_REMOTE_PATH, "limit": 100, "fields": "items.name,items.path"}
     try:
         resp = requests.get(BASE_URL, headers=HEADERS, params=params, timeout=10)
         if resp.status_code == 401:
@@ -92,7 +90,6 @@ def main():
             return
         elif resp.status_code == 404:
             print(f"❌ Папка '{YANDEX_DISK_REMOTE_PATH}' не найдена.")
-            print("→ Проверьте имя (регистр!) и наличие папки в корне Диска.")
             return
         resp.raise_for_status()
     except requests.RequestException as e:
@@ -101,29 +98,23 @@ def main():
 
     data = resp.json()
     items = data.get("_embedded", {}).get("items", [])
-    
-    txt_files = []
-    for item in items:
-        name = item.get("name", "")
-        path = item.get("path", "")
-        if name.lower().endswith(".txt") and path:
-            txt_files.append((name, path))
-    
+
+    txt_files = [(item["name"], item["path"]) for item in items if item.get("name", "").lower().endswith(".txt") and item.get("path")]
+
     if not txt_files:
         print("📂 В папке 'parcer_data' нет .txt файлов.")
         return
 
     print(f"📁 Найдено {len(txt_files)} .txt файлов. Анализ имён...")
-    
+
     dated_files = []
     for name, path in txt_files:
         dt = parse_timestamp_from_filename(name)
         if dt:
             dated_files.append((dt, name, path))
-    
+
     if len(dated_files) < 2:
         print(f"❌ Найдено только {len(dated_files)} файлов с датой в имени.")
-        print("→ Ожидаются имена: 09.11.2025_15.30.00.txt")
         return
 
     dated_files.sort(key=lambda x: x[0], reverse=True)
@@ -159,25 +150,15 @@ def main():
         old = products_old.get(art)
 
         if new and not old:
-            changes.append(
-                f"🆕 [{art}] {new['name']}\n"
-                f"   → Добавлен! Цена: {format_price(new['price'])}"
-            )
+            changes.append(f"🆕 [{art}] {new['name']}\n   → Добавлен! Цена: {format_price(new['price'])}")
         elif old and not new:
-            changes.append(
-                f"❌ [{art}] {old['name']}\n"
-                f"   → Удалён. Была цена: {format_price(old['price'])}"
-            )
+            changes.append(f"❌ [{art}] {old['name']}\n   → Удалён. Была цена: {format_price(old['price'])}")
         elif new and old and new["price"] != old["price"]:
             diff = new["price"] - old["price"]
             arrow = "📈" if diff > 0 else "📉"
-            change_desc = f"Подорожал на {format_price(diff)}" if diff > 0 else f"Подешевел на {format_price(-diff)}"
-            changes.append(
-                f"{arrow} [{art}] {new['name']}\n"
-                f"   {format_price(old['price'])} → {format_price(new['price'])} ({change_desc})"
-            )
+            desc = f"Подорожал на {format_price(diff)}" if diff > 0 else f"Подешевел на {format_price(-diff)}"
+            changes.append(f"{arrow} [{art}] {new['name']}\n   {format_price(old['price'])} → {format_price(new['price'])} ({desc})")
 
-    # 6. Вывод и отправка уведомления
     if changes:
         print("🔔 Изменения:\n")
         for ch in changes:
@@ -185,40 +166,41 @@ def main():
             print()
     else:
         print("✅ Изменений не обнаружено.")
-
     print(f"ℹ️ Всего изменений: {len(changes)}")
 
-    # ✅ Отправка уведомления в ntfy.sh (если есть изменения)
+    # ✅ Отправка push-уведомления в ntfy.sh (работает на Android + iOS)
     if changes:
+        topic = os.getenv("NTFY_TOPIC", "parcing")  # ← fallback на "parcing", если не задано
+        message = "🔔 Изменения в прайсе:\n\n" + "\n".join(changes)
+        if len(message) > 4000:
+            message = message[:4000] + "...\n\n(полный отчёт — в логах GitHub Actions)"
+
         try:
-            topic = os.getenv("parcing") or NTFY_TOPIC_FALLBACK
-            if not topic:
-                print("ℹ️ NTFY_TOPIC не задан — уведомление не отправлено.")
+            # 🔔 Настройки для Android/iOS:
+            # - звук "alarm" (громкий, для важных изменений)
+            # - вибрация
+            # - приоритет high — всплывает даже при Do Not Disturb
+            # - кнопка "Посмотреть" → открывает ntfy в браузере
+            response = requests.post(
+                f"https://ntfy.sh/{topic}",  # ← без пробелов!
+                data=message.encode("utf-8"),
+                headers={
+                    "Title": "🆕 Изменения в прайсе!",
+                    "Priority": "high",
+                    "Tags": "chart_with_upwards_trend,money_with_wings",
+                    "Click": f"https://ntfy.sh/{topic}",  # открыть в браузере
+                    "Actions": '[{"action":"view","label":"Открыть","url":"https://ntfy.sh/' + topic + '"}]',
+                    "Urgent": "true"  # для iOS — force alert
+                },
+                timeout=10
+            )
+            if response.status_code == 200:
+                print("✅ Push-уведомление отправлено (доступно на Android и iOS)")
             else:
-                message = "🔔 Изменения в прайсе:\n\n" + "\n".join(changes)
-                if len(message) > 4000:
-                    message = message[:4000] + "...\n\n(полный лог — в логах)"
-                
-                # 🔥 КРИТИЧЕСКИ ВАЖНО: убран пробел в URL!
-                response = requests.post(
-                    f"https://ntfy.sh/{topic}",  # ← без пробела!
-                    data=message.encode("utf-8"),
-                    headers={
-                        "Title": "🆕 Изменения в прайсе!",
-                        "Priority": "high",
-                        "Tags": "chart_with_upwards_trend,moneybag"
-                    },
-                    timeout=10
-                )
-                if response.status_code == 200:
-                    print("✅ Уведомление успешно отправлено в ntfy.sh")
-                else:
-                    print(f"⚠️ ntfy.sh вернул ошибку: {response.status_code} {response.text}")
+                print(f"⚠️ ntfy.sh ответил: {response.status_code} — {response.text}")
         except Exception as e:
-            print(f"⚠️ Ошибка при отправке в ntfy.sh: {e}")
+            print(f"⚠️ Ошибка отправки push: {e}")
 
 
 if __name__ == "__main__":
     main()
-
-
